@@ -1,0 +1,546 @@
+{
+  "name": "📹 Transcript Translator — Telegram → Drive",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "cf4514db-7bba-4510-924d-3702fe0a704d",
+      "name": "📨 Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      },
+      "notes": "SETUP: Add your Telegram Bot credential here (Bot Token)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "BOT_TOKEN",
+              "value": "TELEGRAM_BOT_TOKEN_REDACTED",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "OPENROUTER_API_KEY",
+              "value": "OPENROUTER_API_KEY_REDACTED",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "file_id",
+              "value": "={{ $json.message.document.file_id }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "chat_id",
+              "value": "={{ $json.message.chat.id }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "file_name",
+              "value": "={{ $json.message.document.file_name }}",
+              "type": "string"
+            },
+            {
+              "id": "2d55367e-3478-49ea-acad-c57d6656f2ef",
+              "name": "",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dac17f9c-7e8d-475c-aaf5-0e12cb53314c",
+      "name": "⚙️ Config (Edit These!)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        176,
+        0
+      ],
+      "notes": "EDIT: Replace BOT_TOKEN and OPENAI_API_KEY with your actual keys"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===============================================\n// Split transcript into 100-line chunks\n// Passes config keys forward so nodes can use them\n// ===============================================\nconst text = $input.first().json.data || '';\nconst config = $('⚙️ Config (Edit These!)').item.json;\n\nconst lines = text.split('\\n').filter(l => l.trim() !== '');\nconst chunkSize = 100;\nconst chunks = [];\n\nfor (let i = 0; i < lines.length; i += chunkSize) {\n  chunks.push({\n    json: {\n      chunkIndex: Math.floor(i / chunkSize),\n      totalChunks: Math.ceil(lines.length / chunkSize),\n      content: lines.slice(i, i + chunkSize).join('\\n'),\n      OPENAI_API_KEY: config.OPENAI_API_KEY,\n      BOT_TOKEN: config.BOT_TOKEN,\n      chat_id: config.chat_id,\n      file_name: config.file_name\n    }\n  });\n}\n\nconsole.log(`Lines: ${lines.length} | Chunks: ${chunks.length}`);\nreturn chunks;"
+      },
+      "id": "49dd2148-5735-4391-b689-25b9b7507a20",
+      "name": "✂️ Split into 100-line Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('⚙️ Config (Edit These!)').item.json.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0.2,\n  \"max_tokens\": 4000,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a professional subtitle and transcript translator.\\n\\nTranslate the input transcript from ANY language into ARABIC.\\n\\nYour task is to transform the input into a bilingual subtitle format while preserving the original structure.\\n\\nSTRICT OUTPUT FORMAT:\\n\\nFor each subtitle block, output EXACTLY in this order:\\n\\n1) The timestamp line exactly as given\\n2) The original text exactly as given\\n3) The Arabic translation of the text\\n4) One blank line\\n\\nRULES:\\n\\n- Never modify, translate, remove, or reformat timestamps\\n- Keep timestamps exactly as they appear (including spaces, commas, arrows, punctuation)\\n- Do NOT repeat the timestamp on the translation line\\n- The translation line must contain ONLY Arabic text\\n- Preserve the original text exactly as written\\n- Preserve the original order of all subtitle blocks\\n\\nBLOCK DETECTION RULES:\\n\\n- A timestamp line starts a new subtitle block\\n- Any following non-empty, non-timestamp lines belong to that same block until the next timestamp line\\n- If a block contains multiple text lines, merge them into ONE line separated by spaces, then translate that merged text\\n- Ignore completely empty lines in the input\\n- If a timestamp has no text, output the timestamp line, then an empty original line, then an empty translation line, then a blank line\\n\\nTRANSLATION RULES:\\n\\n- Translate ONLY the spoken/content text, never the timestamp\\n- Preserve meaning, tone, and intent naturally in Arabic\\n- Keep names, brands, and proper nouns as-is unless they have a well-known Arabic equivalent\\n- If text is already Arabic, rewrite it naturally without copying blindly\\n- If text is unclear or corrupted, translate as best as possible without adding explanations\\n\\nOUTPUT RESTRICTIONS:\\n\\n- Output plain text ONLY\\n- Do NOT add headers, notes, explanations, or markdown\\n- Do NOT number anything\\n- Do NOT add any extra text before or after\\n\\nEXAMPLE INPUT:\\n00:01:15,640 - 00:01:16,640\\nHazan.\\n00:01:17,850 - 00:01:19,110\\nHadi aşkım kalk artık.\\n\\nEXAMPLE OUTPUT:\\n00:01:15,640 - 00:01:16,640\\nHazan.\\nحزان.\\n\\n00:01:17,850 - 00:01:19,110\\nHadi aşkım kalk artık.\\nهيا حبيبي، استيقظ الآن.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.content) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "dc8be5da-10ed-4827-9777-3e6f0065091a",
+      "name": "🤖 Translate Chunk (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        0,
+        224
+      ],
+      "notes": "Runs once per chunk (100 times for a 10,000-line file). Each chunk returns bilingual output."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===============================================\n// Combine all translated chunks + create .txt binary\n// ===============================================\nconst items = $input.all();\nconst firstItem = items[0].json;\n\n// Combine all chunk outputs in order\nconst fullText = items\n  .map(item => {\n    const content = item.json?.choices?.[0]?.message?.content;\n    if (!content) {\n      console.warn('Empty chunk response detected!');\n      return '';\n    }\n    return content.trim();\n  })\n  .join('\\n\\n');\n\n// Get timestamp for filename\nconst now = new Date();\nconst timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);\nconst originalName = firstItem.file_name?.replace('.docx', '') || 'transcript';\nconst fileName = `${originalName}_translated_${timestamp}.txt`;\n\n// Convert to base64 for binary upload\nconst base64Content = Buffer.from(fullText, 'utf-8').toString('base64');\n\nconsole.log(`Combined ${items.length} chunks. Final file: ${fileName}`);\n\nreturn [{\n  json: {\n    text: fullText,\n    chat_id: firstItem.chat_id,\n    BOT_TOKEN: firstItem.BOT_TOKEN,\n    fileName: fileName\n  },\n  binary: {\n    data: {\n      data: base64Content,\n      mimeType: 'text/plain; charset=utf-8',\n      fileName: fileName,\n      fileExtension: 'txt'\n    }\n  }\n}];"
+      },
+      "id": "534282a7-dd58-4f73-8b42-02e28a873236",
+      "name": "🔗 Combine All Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('📨 Telegram Trigger').item.json.message.document.file_name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1AHAtbSboYEDUOmihsat6h3Fu9_RXXxeZ",
+          "mode": "list",
+          "cachedResultName": "transcript",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1AHAtbSboYEDUOmihsat6h3Fu9_RXXxeZ"
+        },
+        "options": {}
+      },
+      "id": "1f05f7b9-e2fd-4ce9-a7d2-780a824ea2fe",
+      "name": "☁️ Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1008,
+        240
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive OAuth2 API"
+        }
+      },
+      "notes": "SETUP: Add your Google Drive OAuth2 credential here. File uploads to root of My Drive."
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('⚙️ Config (Edit These!)').item.json.chat_id }}",
+        "text": "={{\n`الترجمة اتعملت بنجاح!\n\nالملف: ${$('🔗 Combine All Chunks').item.json.fileName}\n\nرابط Google Drive:\n${String($('☁️ Upload to Google Drive').item.json.webViewLink).replace(/&/g, '&amp;')}\n\n${new Date().toLocaleString('ar-EG')}`\n}}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "fe89fa4a-534f-4d0b-bc65-868462f146e8",
+      "name": "📤 Send Drive Link to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        240
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      },
+      "notes": "Sends the Google Drive link back to the same Telegram chat"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $json.BOT_TOKEN }}/getFile?file_id={{ $json.file_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        352,
+        0
+      ],
+      "id": "3053b243-2344-4a44-b08c-2bfd0f288cc0",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/bot{{ $('⚙️ Config (Edit These!)').item.json.BOT_TOKEN }}/{{$json.result.file_path}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        496,
+        0
+      ],
+      "id": "1db4b4fc-a46b-4120-85b9-3821205cf0b9",
+      "name": "donwlaod doc"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://v2.convertapi.com/convert/docx/to/txt?Secret=lHYh3TwK5XNxjZDjDXHo3Kibr9R990tb",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "File",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        640,
+        0
+      ],
+      "id": "8272292c-da29-4fde-82ec-60aef8243444",
+      "name": "doc to txt"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "=Files[0].FileData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        832,
+        0
+      ],
+      "id": "52eb3c17-beb1-45f6-a7c3-084a7ab2c103",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        992,
+        0
+      ],
+      "id": "78cd3de9-b199-43ad-9158-690791553759",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://v2.convertapi.com/convert/html/to/docx?Secret=lHYh3TwK5XNxjZDjDXHo3Kibr9R990tb",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "File",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        640,
+        240
+      ],
+      "id": "e0c2d742-8bc8-402d-983f-9b865d74d1fc",
+      "name": "html to docx"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "Files[0].FileData",
+        "options": {
+          "fileName": "={{ $('📨 Telegram Trigger').item.json.message.document.file_name }}"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        832,
+        240
+      ],
+      "id": "c62849d8-6f2b-42e3-88f8-026fedb89d7b",
+      "name": "Convert to File2"
+    },
+    {
+      "parameters": {
+        "operation": "html",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        240
+      ],
+      "id": "b2b1a87d-ef0f-466b-aab2-87fc2c643f39",
+      "name": "Convert to File3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "015aa32c-1fc0-4614-b230-9207b008594c",
+              "name": "Transcript:",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        240
+      ],
+      "id": "c931792a-3c67-48b2-ab38-20167e216535",
+      "name": "Edit Fields"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "📨 Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Config (Edit These!)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Config (Edit These!)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✂️ Split into 100-line Chunks": {
+      "main": [
+        [
+          {
+            "node": "🤖 Translate Chunk (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Translate Chunk (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "🔗 Combine All Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔗 Combine All Chunks": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "☁️ Upload to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "📤 Send Drive Link to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "donwlaod doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "donwlaod doc": {
+      "main": [
+        [
+          {
+            "node": "doc to txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "doc to txt": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "✂️ Split into 100-line Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "html to docx": {
+      "main": [
+        [
+          {
+            "node": "Convert to File2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File2": {
+      "main": [
+        [
+          {
+            "node": "☁️ Upload to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File3": {
+      "main": [
+        [
+          {
+            "node": "html to docx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Convert to File3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "XLbzN9DesKcfpnp2",
+  "tags": []
+}

@@ -1,8 +1,14 @@
 # Transcript Translator Bot
 
-A paid freelance delivery: drop a DOCX transcript into Telegram and get back an Arabic translation with every timestamp preserved, delivered as a Google Drive link.
+A paid freelance delivery that turns a DOCX transcript into an Arabic translation with every timestamp preserved, delivered back as a Google Drive link.
 
-**Demo video:** https://youtu.be/UNfAMzjIiEE
+![Transcript Translator Bot](https://raw.githubusercontent.com/Moamen-Elsharkawy/portfolio-assets/main/covers/transcript-bot.png)
+
+**[Watch the demo](https://youtu.be/UNfAMzjIiEE)**
+
+## The problem
+
+Translating long transcripts by hand is slow and easy to get wrong, and the timestamps that make a transcript useful are the first thing lost in the process. Teams that need Arabic versions of their transcripts spend hours per file on work that takes no judgment, only time.
 
 ## What it does
 
@@ -11,15 +17,23 @@ A paid freelance delivery: drop a DOCX transcript into Telegram and get back an 
 - Writes the translated document and delivers it back as a Drive link
 - Replaces hours of manual translation work per file
 
-## Workflow
+## Architecture
 
-| File | Role |
-|---|---|
-| `transcript-translator.json` | The full pipeline: Telegram intake, DOCX parsing, timestamped translation, Drive delivery |
+```mermaid
+flowchart TD
+    A[DOCX transcript sent to the Telegram bot] --> B[Parse the DOCX file]
+    B --> C[Translate to Arabic with the LLM, timestamps preserved]
+    C --> D[Write the translated document]
+    D --> E[Deliver back as a Google Drive link]
+```
 
 ## Stack
 
 n8n, Telegram Bot API, GPT-4o-mini, Google Drive.
+
+## Workflow
+
+- `transcript-translator.json`: the full pipeline, covering Telegram intake, DOCX parsing, timestamped translation, and Drive delivery.
 
 ## Import and setup
 
@@ -29,6 +43,10 @@ n8n, Telegram Bot API, GPT-4o-mini, Google Drive.
 ## Note on redaction
 
 All credentials, webhook IDs, and Drive links have been replaced with self-describing placeholders. The workflow logic is exactly what was delivered.
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE).
 
 ---
 

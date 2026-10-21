@@ -1,5 +1,14 @@
 # Transcript Translator Bot
 
+## Project status and evidence
+
+**Client delivered.** Paid client delivery. No universal file-size, accuracy or time-saving guarantee.
+
+**My contribution:** Implemented DOCX intake, chunked translation, ordered reassembly and delivery through Google Drive.
+
+**Verification:** Moamen confirmed a paying client received the delivery; a demonstration and public workflow export are available.
+
+
 A paid freelance delivery that turns a DOCX transcript into an Arabic translation with every timestamp preserved, delivered back as a Google Drive link.
 
 ![Transcript Translator Bot](https://raw.githubusercontent.com/Moamen-Elsharkawy/portfolio-assets/main/covers/transcript-bot.png)
